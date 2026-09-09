@@ -395,11 +395,59 @@ Module.preRun = Module.preRun || [ ];
         }
     }
 
+    async function loadGameArchive() {
+
+        try {
+            if (!window.gameArchiveURL) {
+                return;
+            }
+
+            printMessage("");
+            printMessage("Downloading game archive...");
+
+            let response = await fetch(window.gameArchiveURL);
+
+            if (!response.ok) {
+                reportError("Could not load game archive: " + response.status + " " + response.statusText);
+                return;
+            }
+
+            try {
+                FS.mkdir('/game');
+            } catch (e) {
+                // Directory may already exist.
+            }
+
+            let reader = await response.body.getReader();
+            let f = FS.open('/game/archive.rpa', 'w');
+
+            while (true) {
+                let { done, value } = await reader.read();
+
+                if (done) {
+                    break;
+                }
+
+                FS.write(f, value, 0, value.length);
+            }
+
+            FS.close(f);
+
+        } catch (e) {
+            reportError("Could not download game archive", e);
+        }
+    }
+
     function runLoadGameZip() {
         Module.addRunDependency('loadGameZip');
+        Module.addRunDependency('loadGameArchive');
 
-        loadGameZip().then(() => {
+        Promise.all([
+            loadGameZip(),
+            loadGameArchive()
+        ]).then(() => {
             Module.removeRunDependency('loadGameZip');
+            Module.removeRunDependency('loadGameArchive');
         });
 
     }
