@@ -358,8 +358,53 @@ Module.preRun = Module.preRun || [ ];
         console.log(s);
     }
 
-    // Game files are loaded progressively from Cloudflare R2
-    // through service-worker.js.
+    async function loadGameZip() {
+
+        try {
+            let response = await fetch(window.gameZipURL);
+
+            if (!response.ok) {
+                reportError("Could not load game.zip: " + response.status + " " + response.statusText);
+            }
+
+            gameZipSize = parseInt(response.headers.get('Content-Length'), 10);
+            if(Number.isNaN(gameZipSize)) gameZipSize = 0;
+
+            let reader = await response.body.getReader();
+
+            let f = FS.open('/game.zip', 'w');
+
+            while (true) {
+
+                let { done, value } = await reader.read();
+
+                if (done) {
+                    break;
+                }
+
+                FS.write(f, value, 0, value.length);
+                gameZipDownloaded += value.length;
+
+                updateDownloadProgress();
+            }
+
+            FS.close(f);
+
+        } catch (e) {
+            reportError("Could not download game.zip", e);
+        }
+    }
+
+    function runLoadGameZip() {
+        Module.addRunDependency('loadGameZip');
+
+        loadGameZip().then(() => {
+            Module.removeRunDependency('loadGameZip');
+        });
+
+    }
+
+    Module['preRun'].push(runLoadGameZip);
 
     /***************************************************************************
      *
