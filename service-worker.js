@@ -1,92 +1,77 @@
 var cacheName = 'full-service';
 
-/* Start the service worker and cache all of the app's content or use the existing one */
+const R2_GAME_BASE = 'https://pub-94fbf258bc1348e38814a75cecbca711.r2.dev/game/';
+
 self.addEventListener('install', function (e) {
-    console.log('Service worker installed.');
-    self.skipWaiting();
+    console.log('Service worker installed.');
+    self.skipWaiting();
 });
 
 self.addEventListener('activate', function (e) {
-    return self.clients.claim();
+    return self.clients.claim();
 });
 
-
-/**
- * True if the service worker should add the request to a persistent cache.
- */
 let addToCache = false;
 
-/**
- * Serves the cached version of the request if it exists, otherwise fetches the
- * request from the network and caches it. Fetch is used in the default mode,
- * which will use the cache for most network requests, freshening the cache
- * as required.
- */
 async function fetchAndCache(request) {
-    const cache = await caches.open(cacheName);
-    const cachedResponse = await cache.match(request);
+    const cache = await caches.open(cacheName);
 
+    const originalUrl = new URL(request.url);
+    let fetchRequest = request;
 
-    try {
+    if (originalUrl.pathname.startsWith('/game/')) {
+        const relativePath = originalUrl.pathname.substring('/game/'.length);
+        const r2Url = R2_GAME_BASE + relativePath + originalUrl.search;
+        fetchRequest = new Request(r2Url, request);
+    }
 
-        if (request.url.endsWith("?cached")) {
-            request = new Request(request.url.replace("?cached", "?uncached"), request);
-            let rv = await cache.match(request);
+    const cachedResponse = await cache.match(fetchRequest);
 
-            if (rv == null) {
-                rv = new Response("Not found in cache.", { status: 404, statusText: "Not found in cache." });
-            }
+    try {
+        if (request.url.endsWith("?cached")) {
+            request = new Request(request.url.replace("?cached", "?uncached"), request);
+            let rv = await cache.match(request);
 
-            return rv;
-        }
+            if (rv == null) {
+                rv = new Response("Not found in cache.", {
+                    status: 404,
+                    statusText: "Not found in cache."
+                });
+            }
 
-        if (cachedResponse) {
-            if (cachedResponse.headers.get('Last-Modified')) {
-                request.headers.set('If-Modified-Since', cachedResponse.headers.get('Last-Modified'));
-            }
-            if (cachedResponse.headers.get('ETag')) {
-                request.headers.set('If-None-Match', cachedResponse.headers.get('ETag'));
-            }
-        }
+            return rv;
+        }
 
-        const response = await fetch(request);
+        const response = await fetch(fetchRequest);
 
-        if (cachedResponse && response.status == 304) {
-            return cachedResponse;
-        }
+        if (cachedResponse && response.status == 304) {
+            return cachedResponse;
+        }
 
-        if (addToCache && response.status == 200) {
-            await cache.put(request, response.clone());
-        }
+        if (addToCache && response.status == 200) {
+            await cache.put(fetchRequest, response.clone());
+        }
 
-        return response;
+        return response;
 
-    } catch (e) {
+    } catch (e) {
+        if (cachedResponse) {
+            return cachedResponse;
+        }
 
-        if (cachedResponse) {
-            console.log('Served from cache: ' + request.url);
-            return cachedResponse;
-        }
-
-        console.log('Not found in cache: ' + request.url);
-
-        throw e;
-    }
+        throw e;
+    }
 }
 
-
-/* Serve cached content when offline */
 self.addEventListener('fetch', function (e) {
-    e.respondWith(fetchAndCache(e.request));
+    e.respondWith(fetchAndCache(e.request));
 });
 
 self.addEventListener('message', function (e) {
-    if (e.data[0] == "clearCache") {
-        caches.delete(cacheName);
-        console.log("Cache cleared in service worker.");
-
-        addToCache = false;
-    } else if (e.data[0] == "loadCache") {
-        addToCache = true;
-    }
+    if (e.data[0] == "clearCache") {
+        caches.delete(cacheName);
+        addToCache = false;
+    } else if (e.data[0] == "loadCache") {
+        addToCache = true;
+    }
 });
