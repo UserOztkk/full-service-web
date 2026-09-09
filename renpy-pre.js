@@ -452,7 +452,7 @@ Module.preRun = Module.preRun || [ ];
 
     }
 
-    Module['preRun'].push(runLoadGameZip);
+    // Module['preRun'].push(runLoadGameZip);
 
     /***************************************************************************
      *
