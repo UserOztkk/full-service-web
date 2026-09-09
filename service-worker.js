@@ -8,7 +8,7 @@ self.addEventListener('install', function (e) {
 });
 
 self.addEventListener('activate', function (e) {
-    return self.clients.claim();
+    e.waitUntil(self.clients.claim());
 });
 
 let addToCache = false;
@@ -19,17 +19,35 @@ async function fetchAndCache(request) {
     const originalUrl = new URL(request.url);
     let fetchRequest = request;
 
-    if (originalUrl.pathname.startsWith('/game/')) {
-        const relativePath = originalUrl.pathname.substring('/game/'.length);
-        const r2Url = R2_GAME_BASE + relativePath + originalUrl.search;
+    // GitHub Pages utilise /full-service-web/game/...
+    // On récupère tout ce qui se trouve après /game/
+    const marker = '/game/';
+    const gameIndex = originalUrl.pathname.indexOf(marker);
+
+    if (gameIndex !== -1) {
+        const relativePath = originalUrl.pathname.substring(
+            gameIndex + marker.length
+        );
+
+        const r2Url =
+            R2_GAME_BASE +
+            relativePath +
+            originalUrl.search;
+
         fetchRequest = new Request(r2Url, request);
+
+        console.log('R2 redirect:', originalUrl.href, '->', r2Url);
     }
 
     const cachedResponse = await cache.match(fetchRequest);
 
     try {
         if (request.url.endsWith("?cached")) {
-            request = new Request(request.url.replace("?cached", "?uncached"), request);
+            request = new Request(
+                request.url.replace("?cached", "?uncached"),
+                request
+            );
+
             let rv = await cache.match(request);
 
             if (rv == null) {
